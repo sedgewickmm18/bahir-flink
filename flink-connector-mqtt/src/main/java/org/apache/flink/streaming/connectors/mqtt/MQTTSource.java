@@ -39,6 +39,7 @@ import org.apache.flink.streaming.util.serialization.DeserializationSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+//import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 
@@ -61,10 +62,10 @@ import java.util.List;
 public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
     implements ResultTypeQueryable<OUT>, MqttCallback {
 
-    private static final Logger LOG = LoggerFactory.getLogger(MQTTSource.class);
 
     // starting with mqtt example in m2mIO-gister/SimpleMqttClient.java
     static final String BROKER_URL = "tcp://localhost:1883";
+    static final String MQTT_TOPIC = "hm";
     static final String M2MIO_DOMAIN = "<Insert m2m.io domain here>";
     static final String M2MIO_STUFF = "things";
     static final String M2MIO_THING = "MARKUS JAVA CLIENT";
@@ -72,9 +73,23 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
     static final String M2MIO_PASSWORD_MD5 = "286755fad04869ca523320acce0dc6a4";
 
 
+
+    private static final Logger LOG = LoggerFactory.getLogger(MQTTSource.class);
+
+
+
     // Factory that is used to create AMQ connection
     //private final ActiveMQConnectionFactory connectionFactory;
     private int QoS;
+
+    // URL of the broker
+    private final String brokerURL;
+
+    // MQTT user name/ APIKey
+    private final String userName;
+
+    // MQTT password / APISecret
+    private final String password;
 
     // Name of a queue or topic
     private final String topicName;
@@ -173,9 +188,12 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
         connOpts.setCleanSession(true);
         connOpts.setKeepAliveInterval(30);
 
-        this.topicName = config != null ? config.getDestinationName() : "hm";
-        this.deserializationSchema = config != null ? config.getDeserializationSchema() : null;
-        this.runningChecker = config != null ? config.getRunningChecker() : null;
+        this.brokerURL = config.getBrokerURL();
+        this.topicName = config.getTopicName();
+        this.deserializationSchema = config.getDeserializationSchema();
+        this.runningChecker = config.getRunningChecker();
+        this.userName = config.getUserName();
+        this.password = config.getPassword();
     }
 
     /**
@@ -202,12 +220,12 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
         String clientID = M2MIO_THING;
 
         // set user credentials
-        connOpts.setUserName(M2MIO_USERNAME);
-        connOpts.setPassword(M2MIO_PASSWORD_MD5.toCharArray());
+        connOpts.setUserName(this.userName);
+        connOpts.setPassword(this.password.toCharArray());
 
         // Create a Connection
         try {
-            mqttClient = new MqttClient(BROKER_URL, clientID);
+            mqttClient = new MqttClient(brokerURL, clientID);
             mqttClient.setCallback(this);
             mqttClient.setManualAcks(true);
             mqttClient.connect(connOpts);
@@ -301,9 +319,33 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
         return deserializationSchema.getProducedType();
     }
 
-/* to test locally in the IDE's debugger
+    /* to test locally in the IDE's debugger
     public static void main(String[] args) {
-        MQTTSource<String> smc = new MQTTSource<String>(null);
+
+        DeserializationSchema<String> deserializationSchema = new DeserializationSchema<String>() {
+            @Override
+            public String deserialize(byte[] bytes) throws IOException {
+                return null;
+            }
+
+            @Override
+            public boolean isEndOfStream(String s) {
+                return false;
+            }
+
+            @Override
+            public TypeInformation<String> getProducedType() {
+                return null;
+            }
+        };
+
+        RunningChecker rc = new RunningChecker();
+
+        MQTTSourceConfig mqttSC = new MQTTSourceConfig
+                (BROKER_URL, M2MIO_USERNAME, M2MIO_PASSWORD_MD5,
+                deserializationSchema,rc, MQTT_TOPIC);
+
+        MQTTSource<String> smc = new MQTTSource<String>(mqttSC);
         try {
             smc.open(null);
 
@@ -319,6 +361,5 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
             //
         }
     }
-*/
-
+    */
 }

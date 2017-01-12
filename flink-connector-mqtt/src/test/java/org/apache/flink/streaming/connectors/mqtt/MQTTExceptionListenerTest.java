@@ -36,7 +36,7 @@ public class MQTTExceptionListenerTest {
         JMSException exception = new JMSException("error");
         listener.onException(exception);
         listener.checkErroneous();
-        verify(logger).error("Received ActiveMQ exception", exception);
+        verify(logger).error("Received MQTT exception", exception);
     }
 
     @Test
@@ -47,7 +47,7 @@ public class MQTTExceptionListenerTest {
         listener.onException(exception);
         listener.checkErroneous();
         listener.checkErroneous();
-        verify(logger, times(1)).error("Received ActiveMQ exception", exception);
+        verify(logger, times(1)).error("Received MQTT exception", exception);
     }
 
     @Test(expected = JMSException.class)

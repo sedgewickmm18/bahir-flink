@@ -49,8 +49,9 @@ import static org.mockito.Mockito.when;
 public class MQTTConnectorITCase {
 
     public static final int MESSAGES_NUM = 10000;
-    public static final String QUEUE_NAME = "queue";
-    public static final String TOPIC_NAME = "topic";
+    public static final String BROKER_URL = "queue";
+    public static final String TOPIC_NAME = "hm";
+    public static final String TOPIC2_NAME = "hm2";
     private static ForkableFlinkMiniCluster flink;
     private static int flinkPort;
 
@@ -83,8 +84,9 @@ public class MQTTConnectorITCase {
 
         //MQTTConnectionFactory sourceConnectionFactory = createConnectionFactory();
         MQTTSourceConfig<String> sourceConfig = new MQTTSourceConfig.MQTTSourceConfigBuilder<String>()
-            .setDestinationName(QUEUE_NAME)
+            .setBrokerURL(BROKER_URL)
             .setDeserializationSchema(new SimpleStringSchema())
+            .setTopicName(TOPIC_NAME)
             .build();
         createConsumerTopology(env, sourceConfig);
 
@@ -97,9 +99,9 @@ public class MQTTConnectorITCase {
 
         //MQTTConnectionFactory sourceConnectionFactory = createConnectionFactory();
         MQTTSourceConfig<String> sourceConfig = new MQTTSourceConfig.MQTTSourceConfigBuilder<String>()
-            .setDestinationName(TOPIC_NAME)
+            .setBrokerURL(BROKER_URL)
             .setDeserializationSchema(new SimpleStringSchema())
-            .setDestinationType(DestinationType.TOPIC)
+            .setTopicName(TOPIC_NAME)
             .build();
         createConsumerTopology(env, sourceConfig);
 
@@ -134,8 +136,9 @@ public class MQTTConnectorITCase {
     @Test
     public void amqTopologyWithCheckpointing() throws Exception {
         MQTTSourceConfig<String> sourceConfig = new MQTTSourceConfig.MQTTSourceConfigBuilder<String>()
-            .setDestinationName("queue2")
+            .setBrokerURL(BROKER_URL)
             .setDeserializationSchema(new SimpleStringSchema())
+            .setTopicName(TOPIC2_NAME)
             .build();
 
         final MQTTSource<String> source = new MQTTSource<>(sourceConfig);

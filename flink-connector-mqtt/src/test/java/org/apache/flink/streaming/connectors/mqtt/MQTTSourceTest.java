@@ -43,7 +43,7 @@ import java.util.Collections;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyBoolean;
+//import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -55,7 +55,8 @@ import static org.mockito.Mockito.when;
 public class MQTTSourceTest {
 
     private static final long CHECKPOINT_ID = 1;
-    private final String DESTINATION_NAME = "queue";
+    private final String BROKER_URL = "tcp://localhost:1883";
+    private final String TOPIC_NAME = "hm";
     private final String MSG_ID = "msgId";
 
     //private ActiveMQConnectionFactory connectionFactory;
@@ -72,16 +73,16 @@ public class MQTTSourceTest {
     @Before
     public void before() throws Exception {
         //connectionFactory = mock(ActiveMQConnectionFactory.class);
-        session = mock(Session.class);
-        connection = mock(Connection.class);
-        destination = mock(Destination.class);
+        //session = mock(Session.class);
+        //connection = mock(Connection.class);
+        //destination = mock(Destination.class);
         consumer = mock(MessageConsumer.class);
         context = mock(SourceFunction.SourceContext.class);
 
         message = mock(BytesMessage.class);
 
         //when(connectionFactory.createConnection()).thenReturn(connection);
-        when(connection.createSession(anyBoolean(), anyInt())).thenReturn(session);
+        //when(connection.createSession(anyBoolean(), anyInt())).thenReturn(session);
         when(consumer.receive(anyInt())).thenReturn(message);
         when(session.createConsumer(any(Destination.class))).thenReturn(consumer);
         when(context.getCheckpointLock()).thenReturn(new Object());
@@ -89,7 +90,8 @@ public class MQTTSourceTest {
 
         deserializationSchema = new SimpleStringSchema();
         MQTTSourceConfig<String> config = new MQTTSourceConfig.MQTTSourceConfigBuilder<String>()
-            .setDestinationName(DESTINATION_NAME)
+            .setBrokerURL(BROKER_URL)
+            .setTopicName(TOPIC_NAME)
             .setDeserializationSchema(deserializationSchema)
             .setRunningChecker(new SingleLoopRunChecker())
             .build();
@@ -107,15 +109,15 @@ public class MQTTSourceTest {
     @Test
     public void readFromTopic() throws Exception {
         MQTTSourceConfig<String> config = new MQTTSourceConfig.MQTTSourceConfigBuilder<String>()
-            .setDestinationName(DESTINATION_NAME)
+            .setBrokerURL(BROKER_URL)
+            .setTopicName(TOPIC_NAME)
             .setDeserializationSchema(deserializationSchema)
-            .setDestinationType(DestinationType.TOPIC)
             .setRunningChecker(new SingleLoopRunChecker())
             .build();
         mqttSource = new MQTTSource<>(config);
         mqttSource.setRuntimeContext(createRuntimeContext());
         mqttSource.open(new Configuration());
-        verify(session).createTopic(DESTINATION_NAME);
+        verify(session).createTopic(TOPIC_NAME);
     }
 
     @Test

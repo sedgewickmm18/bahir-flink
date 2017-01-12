@@ -16,7 +16,6 @@
  */
 package org.apache.flink.streaming.connectors.mqtt;
 
-//import org.apache.activemq.ActiveMQConnectionFactory;
 import org.apache.flink.streaming.connectors.mqtt.internal.RunningChecker;
 import org.apache.flink.streaming.util.serialization.DeserializationSchema;
 import org.apache.flink.util.Preconditions;
@@ -29,28 +28,39 @@ import org.apache.flink.util.Preconditions;
 public class MQTTSourceConfig<OUT> {
 
     //private final ActiveMQConnectionFactory connectionFactory;
-    private final String destinationName;
+    private final String brokerURL;
+    private final String userName;
+    private final String password;
     private final DeserializationSchema<OUT> deserializationSchema;
     private final RunningChecker runningChecker;
-    private final DestinationType destinationType;
+    private final String topicName;
 
     //MQTTSourceConfig(ActiveMQConnectionFactory connectionFactory, String destinationName,
-    MQTTSourceConfig(String destinationName,
-                     DeserializationSchema<OUT> deserializationSchema, RunningChecker runningChecker,
-                     DestinationType destinationType) {
+    MQTTSourceConfig(String brokerURL,
+                     String userName,
+                     String password,
+                     DeserializationSchema<OUT> deserializationSchema,
+                     RunningChecker runningChecker,
+                     String topicName) {
         //this.connectionFactory = Preconditions.checkNotNull(connectionFactory, "connectionFactory not set");
-        this.destinationName = Preconditions.checkNotNull(destinationName, "destinationName not set");
+        this.brokerURL = Preconditions.checkNotNull(brokerURL, "brokerURL not set");
+        this.userName = userName;
+        this.password = password;
         this.deserializationSchema = Preconditions.checkNotNull(deserializationSchema, "deserializationSchema not set");
         this.runningChecker = Preconditions.checkNotNull(runningChecker, "runningChecker not set");
-        this.destinationType = Preconditions.checkNotNull(destinationType, "destinationType not set");
+        this.topicName = Preconditions.checkNotNull(topicName, "topicName not set");
     }
 
-    //public MQTTConnectionFactory getConnectionFactory() {
-    //    return connectionFactory;
-    //}
+    public String getBrokerURL() {
+        return brokerURL;
+    }
 
-    public String getDestinationName() {
-        return destinationName;
+    public String getUserName() {
+        return userName;
+    }
+
+    public String getPassword() {
+        return password;
     }
 
     public DeserializationSchema<OUT> getDeserializationSchema() {
@@ -61,8 +71,8 @@ public class MQTTSourceConfig<OUT> {
         return runningChecker;
     }
 
-    public DestinationType getDestinationType() {
-        return destinationType;
+    public String getTopicName() {
+        return topicName;
     }
 
     /**
@@ -72,20 +82,33 @@ public class MQTTSourceConfig<OUT> {
      */
     public static class MQTTSourceConfigBuilder<OUT> {
         //private ActiveMQConnectionFactory connectionFactory;
-        private String destinationName;
+        private String brokerURL;
+        private String userName;
+        private String password;
         private DeserializationSchema<OUT> deserializationSchema;
         private RunningChecker runningChecker = new RunningChecker();
-        private DestinationType destinationType = DestinationType.QUEUE;
+        private String topicName;
 
         //public MQTTSourceConfigBuilder<OUT> setConnectionFactory(ActiveMQConnectionFactory connectionFactory) {
         //    this.connectionFactory = Preconditions.checkNotNull(connectionFactory);
         //    return this;
         //}
 
-        public MQTTSourceConfigBuilder<OUT> setDestinationName(String destinationName) {
-            this.destinationName = Preconditions.checkNotNull(destinationName);
+        public MQTTSourceConfigBuilder<OUT> setBrokerURL(String brokerURL) {
+            this.brokerURL = Preconditions.checkNotNull(brokerURL);
             return this;
         }
+
+        public MQTTSourceConfigBuilder<OUT> setUserName(String userName) {
+            this.userName = Preconditions.checkNotNull(userName);
+            return this;
+        }
+
+        public MQTTSourceConfigBuilder<OUT> setPassword(String password) {
+            this.password = Preconditions.checkNotNull(password);
+            return this;
+        }
+
 
         public MQTTSourceConfigBuilder<OUT> setDeserializationSchema(DeserializationSchema<OUT> deserializationSchema) {
             this.deserializationSchema = Preconditions.checkNotNull(deserializationSchema);
@@ -97,14 +120,14 @@ public class MQTTSourceConfig<OUT> {
             return this;
         }
 
-        public MQTTSourceConfigBuilder<OUT> setDestinationType(DestinationType destinationType) {
-            this.destinationType = Preconditions.checkNotNull(destinationType);
+        public MQTTSourceConfigBuilder<OUT> setTopicName(String topicName) {
+            this.topicName = Preconditions.checkNotNull(topicName);
             return this;
         }
 
         public MQTTSourceConfig<OUT> build() {
-            //return new MQTTSourceConfig<OUT>(connectionFactory, destinationName, deserializationSchema, runningChecker, destinationType);
-            return new MQTTSourceConfig<OUT>(destinationName, deserializationSchema, runningChecker, destinationType);
+            return new MQTTSourceConfig<OUT>(brokerURL, userName, password,
+                    deserializationSchema, runningChecker, topicName);
         }
 
     }
