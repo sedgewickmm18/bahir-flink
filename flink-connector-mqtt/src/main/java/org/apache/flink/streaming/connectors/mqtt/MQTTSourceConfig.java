@@ -31,14 +31,16 @@ public class MQTTSourceConfig<OUT> {
     private final String brokerURL;
     private final String userName;
     private final String password;
+    private final String clientId;
     private final DeserializationSchema<OUT> deserializationSchema;
     private final RunningChecker runningChecker;
     private final String topicName;
 
     //MQTTSourceConfig(ActiveMQConnectionFactory connectionFactory, String destinationName,
-    MQTTSourceConfig(String brokerURL,
+    public MQTTSourceConfig(String brokerURL,
                      String userName,
                      String password,
+                     String clientId,
                      DeserializationSchema<OUT> deserializationSchema,
                      RunningChecker runningChecker,
                      String topicName) {
@@ -46,6 +48,7 @@ public class MQTTSourceConfig<OUT> {
         this.brokerURL = Preconditions.checkNotNull(brokerURL, "brokerURL not set");
         this.userName = userName;
         this.password = password;
+        this.clientId = clientId;
         this.deserializationSchema = Preconditions.checkNotNull(deserializationSchema, "deserializationSchema not set");
         this.runningChecker = Preconditions.checkNotNull(runningChecker, "runningChecker not set");
         this.topicName = Preconditions.checkNotNull(topicName, "topicName not set");
@@ -62,6 +65,8 @@ public class MQTTSourceConfig<OUT> {
     public String getPassword() {
         return password;
     }
+
+    public String getClientId() {return clientId; }
 
     public DeserializationSchema<OUT> getDeserializationSchema() {
         return deserializationSchema;
@@ -85,6 +90,7 @@ public class MQTTSourceConfig<OUT> {
         private String brokerURL;
         private String userName;
         private String password;
+        private String clientId;
         private DeserializationSchema<OUT> deserializationSchema;
         private RunningChecker runningChecker = new RunningChecker();
         private String topicName;
@@ -109,6 +115,11 @@ public class MQTTSourceConfig<OUT> {
             return this;
         }
 
+        public MQTTSourceConfigBuilder<OUT> setClientId(String clientId) {
+            this.clientId = Preconditions.checkNotNull(clientId);
+            return this;
+        }
+
 
         public MQTTSourceConfigBuilder<OUT> setDeserializationSchema(DeserializationSchema<OUT> deserializationSchema) {
             this.deserializationSchema = Preconditions.checkNotNull(deserializationSchema);
@@ -126,7 +137,7 @@ public class MQTTSourceConfig<OUT> {
         }
 
         public MQTTSourceConfig<OUT> build() {
-            return new MQTTSourceConfig<OUT>(brokerURL, userName, password,
+            return new MQTTSourceConfig<OUT>(brokerURL, userName, password, clientId,
                     deserializationSchema, runningChecker, topicName);
         }
 

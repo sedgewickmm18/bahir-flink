@@ -17,14 +17,8 @@
 
 package org.apache.flink.streaming.connectors.mqtt;
 
-import org.eclipse.paho.client.mqttv3.MqttCallback;
-import org.eclipse.paho.client.mqttv3.MqttClient;
-//import org.eclipse.paho.client.mqttv3.MqttTopic;
-import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
-import org.eclipse.paho.client.mqttv3.MqttException;
-import org.eclipse.paho.client.mqttv3.MqttMessage;
-import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
-//import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
+import org.eclipse.paho.client.mqttv3.*;
+import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
@@ -32,20 +26,24 @@ import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.source.MessageAcknowledgingSourceBase;
 import org.apache.flink.streaming.api.operators.StreamingRuntimeContext;
-import org.apache.flink.streaming.connectors.mqtt.internal.MQTTExceptionListener;
+//import org.apache.flink.streaming.connectors.mqtt.internal.MQTTExceptionListener;
 //import org.apache.flink.streaming.connectors.mqtt.internal.MQTTUtil;
 import org.apache.flink.streaming.connectors.mqtt.internal.RunningChecker;
 import org.apache.flink.streaming.util.serialization.DeserializationSchema;
+//import org.apache.flink.streaming.util.serialization.SimpleStringSchema;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 //import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
+import javax.net.ssl.SSLContext;
 
 
 /**
- * Source for reading messages from an ActiveMQ queue.
+ * Source for reading messages from an MQTT queue.
  * <p>
  * To create an instance of AMQSink class one should initialize and configure an
  * instance of a connection factory that will be used to create a connection.
@@ -63,20 +61,9 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
     implements ResultTypeQueryable<OUT>, MqttCallback {
 
 
-    // starting with mqtt example in m2mIO-gister/SimpleMqttClient.java
-    static final String BROKER_URL = "tcp://localhost:1883";
-    static final String MQTT_TOPIC = "hm";
-    static final String M2MIO_DOMAIN = "<Insert m2m.io domain here>";
-    static final String M2MIO_STUFF = "things";
-    static final String M2MIO_THING = "MARKUS JAVA CLIENT";
-    static final String M2MIO_USERNAME = "markus";
-    static final String M2MIO_PASSWORD_MD5 = "286755fad04869ca523320acce0dc6a4";
-
-
-
     private static final Logger LOG = LoggerFactory.getLogger(MQTTSource.class);
 
-
+    private ArrayBlockingQueue<MqttMessage> blockingQueue;
 
     // Factory that is used to create AMQ connection
     //private final ActiveMQConnectionFactory connectionFactory;
@@ -91,6 +78,9 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
     // MQTT password / APISecret
     private final String password;
 
+    // MQTT clientId
+    private final String clientId;
+
     // Name of a queue or topic
     private final String topicName;
     // Deserialization scheme that is used to convert bytes to output message
@@ -103,7 +93,7 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
     // MQTT connect options
     private transient MqttConnectOptions connOpts;
     // AMQ session
-    private transient MqttClient mqttClient;
+    private transient MqttAsyncClient mqttClient = null;
 
     // If source should immediately acknowledge incoming message
     private boolean autoAck;
@@ -113,8 +103,11 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
     // Map of message ids to currently unacknowledged MQTT messages
     private HashMap<String, MqttMessage> unacknowledgedMessages = new HashMap<>();
 
+    // Persistence layer for MQTT client
+    private static MemoryPersistence MQTT_persistence;
+
     // Listener for AMQ exceptions
-    private MQTTExceptionListener exceptionListener;
+    //private MQTTExceptionListener exceptionListener;
 
     /**
      *
@@ -125,6 +118,25 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
     public void connectionLost(Throwable t) {
         System.out.println("Connection lost!");
         // code to reconnect to the broker would go here if desired
+        try {
+            mqttClient.connect(connOpts).waitForCompletion(1000 * 60);
+        } catch (MqttSecurityException se) {
+            se.printStackTrace();
+            System.out.println("Could not connect to MQTT broker, wrong credentials");
+        } catch (MqttException e) {
+            e.printStackTrace();
+            System.out.println("Could not get to MQTT broker");
+        } catch(Exception e) {
+            System.out.println("This is definitively not good");
+        }
+        try {
+            // now resubscribe
+            mqttClient.subscribe(topicName, QoS);
+        } catch(Exception e) {
+            System.out.println("This is also bad");
+
+        }
+        // we probably need to reestablish the subscriptions
     }
 
     /**
@@ -145,8 +157,6 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
         }
     }
 
-
-
     /**
      *
      * messageArrived
@@ -160,20 +170,8 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
         System.out.println("| Message: " + new String(message.getPayload()));
         System.out.println("-------------------------------------------------");
 
-        byte[] bytes = message.getPayload();
 
-        if (flinkCtx == null) {return;}
-
-        OUT value = deserializationSchema.deserialize(bytes);
-
-        synchronized (flinkCtx.getCheckpointLock()) {
-                flinkCtx.collect(value);
-                if (!autoAck) {
-                    String messageId = Integer.toString(message.getId());
-                    addId(messageId);
-                    unacknowledgedMessages.put(messageId, message);
-                }
-         }
+        blockingQueue.add(message);
     }
 
     /**
@@ -183,10 +181,6 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
      */
     public MQTTSource(MQTTSourceConfig<OUT> config) {
         super(String.class);
-        //this.connectionFactory = config.getConnectionFactory();
-        this.connOpts = new MqttConnectOptions();
-        connOpts.setCleanSession(true);
-        connOpts.setKeepAliveInterval(30);
 
         this.brokerURL = config.getBrokerURL();
         this.topicName = config.getTopicName();
@@ -194,6 +188,12 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
         this.runningChecker = config.getRunningChecker();
         this.userName = config.getUserName();
         this.password = config.getPassword();
+        this.clientId = config.getClientId();
+        //System.out.println("Broker: " + this.brokerURL);
+        //System.out.println("Topic: " + this.topicName);
+        //System.out.println("ClientID: " + this.clientId);
+
+
     }
 
     /**
@@ -209,47 +209,73 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
     }
 
     // Visible for testing
-    void setExceptionListener(MQTTExceptionListener exceptionListener) {
-        this.exceptionListener = exceptionListener;
-    }
+    //void setExceptionListener(MQTTExceptionListener exceptionListener) {
+    //    this.exceptionListener = exceptionListener;
+    //}
 
     @Override
     public void open(Configuration config) throws Exception {
         super.open(config);
 
-        String clientID = M2MIO_THING;
+        this.connOpts = new MqttConnectOptions();
+        this.blockingQueue = new ArrayBlockingQueue<MqttMessage>(10);
+        connOpts.setCleanSession(true);
+        connOpts.setKeepAliveInterval(30);
 
         // set user credentials
         connOpts.setUserName(this.userName);
         connOpts.setPassword(this.password.toCharArray());
+        connOpts.setCleanSession(true);
+        //connOpts.setKeepAliveInterval(60); default
+        //connOpts.setMaxInflight(10); default, only for publish
+        connOpts.setAutomaticReconnect(false); // we do it and resubscribe
+
+
+        MQTT_persistence = new MemoryPersistence();
 
         // Create a Connection
         try {
-            mqttClient = new MqttClient(brokerURL, clientID);
+            mqttClient = new MqttAsyncClient(brokerURL, clientId, MQTT_persistence);
             mqttClient.setCallback(this);
             mqttClient.setManualAcks(true);
-            mqttClient.connect(connOpts);
+
+            SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
+            //LoggerUtility.info(CLASS_NAME, METHOD, "Provider: " + sslContext.getProvider().getName());
+            sslContext.init(null, null, null);
+            connOpts.setSocketFactory(sslContext.getSocketFactory());
+
+            mqttClient.connect(connOpts).waitForCompletion(1000 * 60);
+        } catch (MqttSecurityException se) {
+            se.printStackTrace();
+            System.out.println("Could not connect to MQTT broker, wrong credentials");
+            throw se;
         } catch (MqttException e) {
             e.printStackTrace();
-            System.exit(-1);
+            System.out.println("Could not get to MQTT broker");
+            throw e;
         }
 
         //exceptionListener = new AMQExceptionListener(LOG, logFailuresOnly);
         //connection.setExceptionListener(exceptionListener);
 
-        RuntimeContext runtimeContext = getRuntimeContext();
-        if (runtimeContext instanceof StreamingRuntimeContext
-            && ((StreamingRuntimeContext) runtimeContext).isCheckpointingEnabled()) {
+        RuntimeContext runtimeContext;
+        try {
+            runtimeContext = getRuntimeContext();
+        } catch (Exception e) {
+            QoS = 2;
             autoAck = false;
-            //acknowledgeType = ActiveMQSession.INDIVIDUAL_ACKNOWLEDGE;
+            return;
+        } finally {
+            runningChecker.setIsRunning(true);
+        }
+        if (runtimeContext instanceof StreamingRuntimeContext
+                && ((StreamingRuntimeContext) runtimeContext).isCheckpointingEnabled()) {
+            autoAck = false;
             QoS = 2;
         } else {
             autoAck = true;
-            //acknowledgeType = ActiveMQSession.AUTO_ACKNOWLEDGE;
             QoS = 1;
         }
-
-        runningChecker.setIsRunning(true);
     }
 
     @Override
@@ -257,7 +283,9 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
         super.close();
         RuntimeException exception = null;
         try {
-            mqttClient.close();
+            if (mqttClient != null) {
+                mqttClient.close();
+            }
         } catch (MqttException e) {
             if (logFailuresOnly) {
                 LOG.error("Failed to close MQTT session", e);
@@ -296,22 +324,49 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
     @Override
     public void run(SourceContext<OUT> ctx) throws Exception {
         flinkCtx = ctx;
-        System.out.println("subscribing to " + topicName);
+        System.out.println("subscribing to " + topicName + "   QoS: " + QoS);
         //exceptionListener.checkErroneous();
 
 
         try {
-            //mqttClient.subscribe(topicName, QoS);
             autoAck = false;
-            mqttClient.subscribe(topicName, 2);
+            mqttClient.subscribe(topicName, QoS);
         } catch (Exception e) {
             e.printStackTrace();
+        }
+
+        while (runningChecker.isRunning()) {
+            MqttMessage message = blockingQueue.take();
+
+            if (message == null) return;
+
+            byte[] bytes = message.getPayload();
+
+            System.out.println("-------------- main thread ----------------------");
+            System.out.println("| Message: " + new String(message.getPayload()));
+            System.out.println("-------------------------------------------------");
+
+            if (flinkCtx == null) {continue;}
+
+            OUT value = deserializationSchema.deserialize(bytes);
+
+            synchronized (flinkCtx.getCheckpointLock()) {
+                flinkCtx.collect(value);
+                if (!autoAck) {
+                    String messageId = Integer.toString(message.getId());
+                    addId(messageId);
+                    unacknowledgedMessages.put(messageId, message);
+                }
+            }
         }
     }
 
     @Override
     public void cancel() {
+
         runningChecker.setIsRunning(false);
+        blockingQueue.add(null); // wake up runner
+
     }
 
     @Override
@@ -319,47 +374,33 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
         return deserializationSchema.getProducedType();
     }
 
-    /* to test locally in the IDE's debugger
+    /* to test locally in the IDE's debugger */
+    /*
     public static void main(String[] args) {
 
-        DeserializationSchema<String> deserializationSchema = new DeserializationSchema<String>() {
-            @Override
-            public String deserialize(byte[] bytes) throws IOException {
-                return null;
-            }
-
-            @Override
-            public boolean isEndOfStream(String s) {
-                return false;
-            }
-
-            @Override
-            public TypeInformation<String> getProducedType() {
-                return null;
-            }
-        };
+        DeserializationSchema<String> deserializationSchema = new SimpleStringSchema();
 
         RunningChecker rc = new RunningChecker();
 
-        MQTTSourceConfig mqttSC = new MQTTSourceConfig
-                (BROKER_URL, M2MIO_USERNAME, M2MIO_PASSWORD_MD5,
-                deserializationSchema,rc, MQTT_TOPIC);
+        MQTTSourceConfig mqttSC = new MQTTSourceConfig(
+                                "ssl://c8j2xj.messaging.internetofthings.ibmcloud.com:8883",
+                                "a-c8j2xj-lonlpr4flw", "eDI7Ar-d_p2f0V3fuq",
+                                "a:c8j2xj:a-c8j2xj-lonlpr4flw",
+                                deserializationSchema,rc,
+                                "iot-2/type/+/id/+/evt/+/fmt/+");
 
         MQTTSource<String> smc = new MQTTSource<String>(mqttSC);
         try {
             smc.open(null);
+        } catch (Exception e) {
+            System.exit(2);
+        }
 
-        }
-        catch (Exception e) {
-            //
-        }
         try {
             smc.run(null);
+        } catch (Exception e) {
+            System.exit(3);
+        }
+    } */
 
-        }
-        catch (Exception e) {
-            //
-        }
-    }
-    */
 }

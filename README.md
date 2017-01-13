@@ -33,3 +33,10 @@ Testing first requires [building Bahir](#building-bahir). Once Bahir is built, t
 can be run using:
 
     mvn test
+
+### Installing the libraries in your local Maven repository
+
+Since the MQTT connector is not part of the Bahir-Flink distribution, you have to install it in your local Maven repository to build Flink jobs with it.
+This is the command I'm using right now
+
+    mvn install:install-file -Dfile=flink-connector-mqtt/target/flink-connector-mqtt_2.11-1.0.0-SNAPSHOT.jar -DgroupId=org.apache.flink -DartifactId=flink-connector-mqtt -Dversion=1.0 -Dpackaging=jar
