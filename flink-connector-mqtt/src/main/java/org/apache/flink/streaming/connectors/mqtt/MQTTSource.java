@@ -30,7 +30,7 @@ import org.apache.flink.streaming.api.operators.StreamingRuntimeContext;
 //import org.apache.flink.streaming.connectors.mqtt.internal.MQTTUtil;
 import org.apache.flink.streaming.connectors.mqtt.internal.RunningChecker;
 import org.apache.flink.streaming.util.serialization.DeserializationSchema;
-//import org.apache.flink.streaming.util.serialization.SimpleStringSchema;
+import org.apache.flink.streaming.util.serialization.SimpleStringSchema;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,8 +39,10 @@ import org.slf4j.LoggerFactory;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.net.URL;
+import java.net.URLConnection;
+import java.io.IOException;
 import javax.net.ssl.SSLContext;
-
 
 /**
  * Source for reading messages from an MQTT queue.
@@ -116,27 +118,69 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
      */
     @Override
     public void connectionLost(Throwable t) {
-        System.out.println("Connection lost!");
-        // code to reconnect to the broker would go here if desired
-        try {
-            mqttClient.connect(connOpts).waitForCompletion(1000 * 60);
-        } catch (MqttSecurityException se) {
-            se.printStackTrace();
-            System.out.println("Could not connect to MQTT broker, wrong credentials");
-        } catch (MqttException e) {
-            e.printStackTrace();
-            System.out.println("Could not get to MQTT broker");
-        } catch(Exception e) {
-            System.out.println("This is definitively not good");
-        }
-        try {
-            // now resubscribe
-            mqttClient.subscribe(topicName, QoS);
-        } catch(Exception e) {
-            System.out.println("This is also bad");
+        LOG.error("Connection lost!");
 
-        }
-        // we probably need to reestablish the subscriptions
+        // reconnect in a separate thread
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                for (;;) {
+                    //
+                    if (!isInetAvailable()) {
+                        try {
+                            Thread.sleep(2);
+                        } catch (Exception ie) {
+                            // ignore interrupt exception
+                        }
+                        continue;
+                    }
+
+                    // reconnect
+                    if (!mqttClient.isConnected()) {
+                        try {
+                            mqttClient.connect(connOpts).waitForCompletion(1000 * 60);
+                        } catch (MqttSecurityException se) {
+                            se.printStackTrace();
+                            LOG.error("Could not connect to MQTT broker, wrong credentials");
+                            System.exit(1);
+                        } catch (MqttException e) {
+                            e.printStackTrace();
+                            LOG.error("Could not get to MQTT broker, retry:" + e.getMessage());
+                            try {
+                                Thread.sleep(2);
+                            } catch (Exception ie) {
+                                // ignore interrupt exception
+                            }
+                        } catch(Exception e) {
+                            LOG.error("This is definitively not good");
+                            System.exit(2);
+                        }
+                        continue;
+                    }
+
+                    // now resubscribe
+                    try {
+                        mqttClient.subscribe(topicName, QoS);
+                    } catch (MqttSecurityException se) {
+                        LOG.error("I am not allowed to resubscribe, strange");
+                        System.exit(3);
+                    } catch (MqttException e) {
+                        LOG.error("Could not get to MQTT broker, retry: " + e.getMessage());
+                        try {
+                            Thread.sleep(2);
+                        } catch (Exception ie) {
+                            // ignore interrupt exception
+                        }
+                        continue;
+                    } catch(Exception e) {
+                        LOG.error("Resubscription failed: " + e.getMessage());
+                        System.exit(4);
+                    }
+                    break;
+                }
+            }
+
+        }).start();
     }
 
     /**
@@ -149,7 +193,7 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
     @Override
     public void deliveryComplete(IMqttDeliveryToken token) {
         try {
-            System.out.println("Pub complete" + new String(token.getMessage().getPayload()));
+            LOG.info("Pub complete" + new String(token.getMessage().getPayload()));
         }
         catch (MqttException e) {
             e.printStackTrace();
@@ -165,10 +209,10 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
      */
     @Override
     public void messageArrived(String topic, MqttMessage message) throws Exception {
-        System.out.println("-------------------------------------------------");
-        System.out.println("| Topic:" + topic);
-        System.out.println("| Message: " + new String(message.getPayload()));
-        System.out.println("-------------------------------------------------");
+        //System.out.println("-------------------------------------------------");
+        LOG.info("| Topic:" + topic);
+        LOG.info("| Message: " + new String(message.getPayload()));
+        //System.out.println("-------------------------------------------------");
 
 
         blockingQueue.add(message);
@@ -192,8 +236,11 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
         //System.out.println("Broker: " + this.brokerURL);
         //System.out.println("Topic: " + this.topicName);
         //System.out.println("ClientID: " + this.clientId);
+        SimpleStringSchema unusedObject;
 
-
+        LOG.debug("debug");
+        LOG.info("info");
+        LOG.error("error");
     }
 
     /**
@@ -226,7 +273,7 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
         connOpts.setUserName(this.userName);
         connOpts.setPassword(this.password.toCharArray());
         connOpts.setCleanSession(true);
-        //connOpts.setKeepAliveInterval(60); default
+        connOpts.setKeepAliveInterval(30); // default is 60, reduced to 30 to keep firewalls happy
         //connOpts.setMaxInflight(10); default, only for publish
         connOpts.setAutomaticReconnect(false); // we do it and resubscribe
 
@@ -247,11 +294,11 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
             mqttClient.connect(connOpts).waitForCompletion(1000 * 60);
         } catch (MqttSecurityException se) {
             se.printStackTrace();
-            System.out.println("Could not connect to MQTT broker, wrong credentials");
+            LOG.error("Could not connect to MQTT broker, wrong credentials");
             throw se;
         } catch (MqttException e) {
             e.printStackTrace();
-            System.out.println("Could not get to MQTT broker");
+            LOG.error("Could not get to MQTT broker");
             throw e;
         }
 
@@ -282,6 +329,18 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
     public void close() throws Exception {
         super.close();
         RuntimeException exception = null;
+        try {
+            if (mqttClient != null) {
+                mqttClient.disconnectForcibly();
+            }
+        } catch (MqttException e) {
+            if (logFailuresOnly) {
+                LOG.error("Failed to close MQTT session", e);
+            } else {
+                exception = new RuntimeException("Failed to close MQTT consumer", e);
+            }
+        }
+
         try {
             if (mqttClient != null) {
                 mqttClient.close();
@@ -324,7 +383,7 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
     @Override
     public void run(SourceContext<OUT> ctx) throws Exception {
         flinkCtx = ctx;
-        System.out.println("subscribing to " + topicName + "   QoS: " + QoS);
+        LOG.info("subscribing to " + topicName + "   QoS: " + QoS);
         //exceptionListener.checkErroneous();
 
 
@@ -342,9 +401,7 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
 
             byte[] bytes = message.getPayload();
 
-            System.out.println("-------------- main thread ----------------------");
-            System.out.println("| Message: " + new String(message.getPayload()));
-            System.out.println("-------------------------------------------------");
+            LOG.info("| Message: " + new String(message.getPayload()));
 
             if (flinkCtx == null) {continue;}
 
@@ -365,8 +422,11 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
     public void cancel() {
 
         runningChecker.setIsRunning(false);
-        blockingQueue.add(null); // wake up runner
-
+        try {
+            blockingQueue.add(null); // wake up runner, blockingQueue might have been already gone at that point
+        } catch (Exception e) {
+            //
+        }
     }
 
     @Override
@@ -374,18 +434,40 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
         return deserializationSchema.getProducedType();
     }
 
+
+    /*Check internet connection*/
+    public static boolean isInetAvailable() {
+        boolean connectivity;
+        try {
+            URL url = new URL("https://internetofthings.ibmcloud.com");
+            URLConnection conn = url.openConnection();
+            conn.connect();
+            connectivity = true;
+        } catch (IOException e) {
+            connectivity = false;
+            LOG.error("internet gone");
+        }
+        return connectivity;
+    }
+
+
+
     /* to test locally in the IDE's debugger */
     /*
     public static void main(String[] args) {
+
 
         DeserializationSchema<String> deserializationSchema = new SimpleStringSchema();
 
         RunningChecker rc = new RunningChecker();
 
         MQTTSourceConfig mqttSC = new MQTTSourceConfig(
-                                "ssl://c8j2xj.messaging.internetofthings.ibmcloud.com:8883",
-                                "a-c8j2xj-lonlpr4flw", "eDI7Ar-d_p2f0V3fuq",
-                                "a:c8j2xj:a-c8j2xj-lonlpr4flw",
+                        "ssl://r6sunr.messaging.internetofthings.ibmcloud.com:8883",
+                        "a-r6sunr-b6y6v6ghq1", "0R5jEzRqj03d0m-8aM",
+                        "A:r6sunr:a-r6sunr-b6y6v6ghq1",
+                //"ssl://c8j2xj.messaging.internetofthings.ibmcloud.com:8883",
+             //   "a-c8j2xj-lonlpr4flw", "eDI7Ar-d_p2f0V3fuq",
+              //  "a:c8j2xj:a-c8j2xj-lonlpr4flw",
                                 deserializationSchema,rc,
                                 "iot-2/type/+/id/+/evt/+/fmt/+");
 
@@ -396,11 +478,13 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
             System.exit(2);
         }
 
+
         try {
             smc.run(null);
         } catch (Exception e) {
             System.exit(3);
         }
-    } */
+    }
+    */
 
 }
