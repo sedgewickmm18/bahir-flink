@@ -47,15 +47,21 @@ import javax.net.ssl.SSLContext;
 /**
  * Source for reading messages from an MQTT queue.
  * <p>
- * To create an instance of AMQSink class one should initialize and configure an
- * instance of a connection factory that will be used to create a connection.
- * This source is waiting for incoming messages from ActiveMQ and converts them from
- * an array of bytes into an instance of the output type. If an incoming
- * message is not a message with an array of bytes, this message is ignored
- * and warning message is logged.
- *
- * If checkpointing is enabled AMQSink will not acknowledge received AMQ messages as they arrive,
+ * To create an instance of MQTT Source class one should initialize and configure an
+ * MQTT async client instance. The MQTT Source calls then implements an MQTT callback
+ * with the methods connectionLost, messageArrived, messageArrivedComplete. The first
+ * method is used to reconnect and resubscribe, the second receives an incoming message and
+ * puts it on an asynchronous queue to be picked up by the run method that
+ * is waiting for incoming messages. messageArrivedComplete is called to acknowledge all
+ * messages that are covered by a checkpoint so that the MQTT broker can finally drop them.
+ * Otherwise the MQTT broker will resend them after a while unless the maximum size of the
+ * topic buffer is exceeded (5000 message for Watson IoT - see also
+ * https://console.ng.bluemix.net/docs/services/IoT/reference/mqtt/index.html )
+ * *
+ * If checkpointing is enabled MQTTSource will not acknowledge received MQTT messages as they arrive,
  * but will store them internally and will acknowledge a bulk of messages during checkpointing.
+ * See here for a discussion about MQTT, QoS = 2 and 'exactly once' guarantees
+ * http://www.eejournal.com/blog/is-exactly-once-delivery-possible-with-mqtt/
  *
  * @param <OUT> type of output messages
  */
@@ -266,13 +272,13 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
 
         this.connOpts = new MqttConnectOptions();
         this.blockingQueue = new ArrayBlockingQueue<MqttMessage>(10);
-        connOpts.setCleanSession(true);
-        connOpts.setKeepAliveInterval(30);
 
         // set user credentials
         connOpts.setUserName(this.userName);
         connOpts.setPassword(this.password.toCharArray());
-        connOpts.setCleanSession(true);
+
+        connOpts.setCleanSession(true); // no durable subscriptions, resubscribe instead
+
         connOpts.setKeepAliveInterval(30); // default is 60, reduced to 30 to keep firewalls happy
         //connOpts.setMaxInflight(10); default, only for publish
         connOpts.setAutomaticReconnect(false); // we do it and resubscribe
