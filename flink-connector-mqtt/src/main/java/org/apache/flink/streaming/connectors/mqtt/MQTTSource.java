@@ -217,7 +217,7 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
     public void messageArrived(String topic, MqttMessage message) throws Exception {
         //System.out.println("-------------------------------------------------");
         LOG.info("| Topic:" + topic);
-        LOG.info("| Message: " + new String(message.getPayload()));
+        LOG.info("| Message: Id : " + message.getId() + " Payload: " + new String(message.getPayload()));
         //System.out.println("-------------------------------------------------");
 
 
@@ -419,6 +419,7 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
                     String messageId = Integer.toString(message.getId());
                     addId(messageId);
                     unacknowledgedMessages.put(messageId, message);
+                    LOG.info("Later to acknowledge MQTT message with id ", messageId);
                 }
             }
         }
