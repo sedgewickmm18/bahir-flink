@@ -34,7 +34,7 @@ public class MQTTSourceConfig<OUT> {
     private final String clientId;
     private final DeserializationSchema<OUT> deserializationSchema;
     private final RunningChecker runningChecker;
-    private final String topicName;
+    private final String[] topicNames;
 
     //MQTTSourceConfig(ActiveMQConnectionFactory connectionFactory, String destinationName,
     public MQTTSourceConfig(String brokerURL,
@@ -43,7 +43,7 @@ public class MQTTSourceConfig<OUT> {
                      String clientId,
                      DeserializationSchema<OUT> deserializationSchema,
                      RunningChecker runningChecker,
-                     String topicName) {
+                     String [] topicNames) {
         //this.connectionFactory = Preconditions.checkNotNull(connectionFactory, "connectionFactory not set");
         this.brokerURL = Preconditions.checkNotNull(brokerURL, "brokerURL not set");
         this.userName = userName;
@@ -51,7 +51,8 @@ public class MQTTSourceConfig<OUT> {
         this.clientId = clientId;
         this.deserializationSchema = Preconditions.checkNotNull(deserializationSchema, "deserializationSchema not set");
         this.runningChecker = Preconditions.checkNotNull(runningChecker, "runningChecker not set");
-        this.topicName = Preconditions.checkNotNull(topicName, "topicName not set");
+        //this.topicName = Preconditions.checkNotNull(topicName, "topicName not set");
+        this.topicNames = topicNames;
     }
 
     public String getBrokerURL() {
@@ -76,8 +77,8 @@ public class MQTTSourceConfig<OUT> {
         return runningChecker;
     }
 
-    public String getTopicName() {
-        return topicName;
+    public String[] getTopicNames() {
+        return topicNames;
     }
 
     /**
@@ -93,7 +94,7 @@ public class MQTTSourceConfig<OUT> {
         private String clientId;
         private DeserializationSchema<OUT> deserializationSchema;
         private RunningChecker runningChecker = new RunningChecker();
-        private String topicName;
+        private String[] topicNames;
 
         //public MQTTSourceConfigBuilder<OUT> setConnectionFactory(ActiveMQConnectionFactory connectionFactory) {
         //    this.connectionFactory = Preconditions.checkNotNull(connectionFactory);
@@ -132,13 +133,14 @@ public class MQTTSourceConfig<OUT> {
         }
 
         public MQTTSourceConfigBuilder<OUT> setTopicName(String topicName) {
-            this.topicName = Preconditions.checkNotNull(topicName);
+            //this.topicNames = Preconditions.checkNotNull(topicName);
+            this.topicNames = topicNames;
             return this;
         }
 
         public MQTTSourceConfig<OUT> build() {
             return new MQTTSourceConfig<OUT>(brokerURL, userName, password, clientId,
-                    deserializationSchema, runningChecker, topicName);
+                    deserializationSchema, runningChecker, topicNames);
         }
 
     }

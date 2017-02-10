@@ -40,3 +40,7 @@ Since the MQTT connector is not part of the Bahir-Flink distribution, you have t
 This is the command I'm using right now
 
     mvn install:install-file -Dfile=flink-connector-mqtt/target/flink-connector-mqtt_2.11-1.0.0-SNAPSHOT.jar -DgroupId=org.apache.flink -DartifactId=flink-connector-mqtt -Dversion=1.0 -Dpackaging=jar
+
+Since MQTT in general doesn't allow for multiple subscriptions for the same userid/password (API key/secret) pair, it should be used with care. Generally a separate mqttSource or mqttSink object with distinct userids are required in order to add them as source, resp. sink to a datastream.
+
+Furthermore it should be noted that the 'exactly once' semantic depends on the event publisher as well as on the subscriber. So MQTTSource attempts to subscribe with QoS of 2 for 'exactly once', but if message is sent with a lower quality of service, it is received with this QoS.

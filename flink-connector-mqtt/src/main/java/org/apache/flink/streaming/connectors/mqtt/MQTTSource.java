@@ -90,7 +90,7 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
     private final String clientId;
 
     // Name of a queue or topic
-    private final String topicName;
+    private final String[] topicNames;
     // Deserialization scheme that is used to convert bytes to output message
     private final DeserializationSchema<OUT> deserializationSchema;
 
@@ -153,7 +153,7 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
                             e.printStackTrace();
                             LOG.error("Could not get to MQTT broker, retry:" + e.getMessage());
                             try {
-                                Thread.sleep(2);
+                                Thread.sleep(3);
                             } catch (Exception ie) {
                                 // ignore interrupt exception
                             }
@@ -166,7 +166,9 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
 
                     // now resubscribe
                     try {
-                        mqttClient.subscribe(topicName, QoS);
+                        for (String topicName: topicNames) {
+                           mqttClient.subscribe(topicName, QoS);
+                        }
                     } catch (MqttSecurityException se) {
                         LOG.error("I am not allowed to resubscribe, strange");
                         System.exit(3);
@@ -233,7 +235,7 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
         super(String.class);
 
         this.brokerURL = config.getBrokerURL();
-        this.topicName = config.getTopicName();
+        this.topicNames = config.getTopicNames();
         this.deserializationSchema = config.getDeserializationSchema();
         this.runningChecker = config.getRunningChecker();
         this.userName = config.getUserName();
@@ -269,6 +271,8 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
     @Override
     public void open(Configuration config) throws Exception {
         super.open(config);
+
+        LOG.info("Opening MQTT Source");
 
         this.connOpts = new MqttConnectOptions();
         this.blockingQueue = new ArrayBlockingQueue<MqttMessage>(10);
@@ -315,6 +319,7 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
         try {
             runtimeContext = getRuntimeContext();
         } catch (Exception e) {
+            LOG.error("Connected locally");
             QoS = 2;
             autoAck = false;
             return;
@@ -323,9 +328,11 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
         }
         if (runtimeContext instanceof StreamingRuntimeContext
                 && ((StreamingRuntimeContext) runtimeContext).isCheckpointingEnabled()) {
+            LOG.info("Connected with QoS 2");
             autoAck = false;
             QoS = 2;
         } else {
+            LOG.info("Connected with QoS 1");
             autoAck = true;
             QoS = 1;
         }
@@ -334,6 +341,7 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
     @Override
     public void close() throws Exception {
         super.close();
+        LOG.info("Closing MQTT Source");
         RuntimeException exception = null;
         try {
             if (mqttClient != null) {
@@ -389,13 +397,15 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
     @Override
     public void run(SourceContext<OUT> ctx) throws Exception {
         flinkCtx = ctx;
-        LOG.info("subscribing to " + topicName + "   QoS: " + QoS);
+        LOG.info("subscribing to " + topicNames[0] + "   QoS: " + QoS);
         //exceptionListener.checkErroneous();
 
 
         try {
             autoAck = false;
-            mqttClient.subscribe(topicName, QoS);
+            for (String topicName: topicNames) {
+                 mqttClient.subscribe(topicName, QoS);
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -407,7 +417,7 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
 
             byte[] bytes = message.getPayload();
 
-            LOG.info("| Message: " + new String(message.getPayload()));
+            LOG.info("+ Message: Id : " + message.getId() + " Qos: " + message.getQos());
 
             if (flinkCtx == null) {continue;}
 
@@ -415,7 +425,10 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
 
             synchronized (flinkCtx.getCheckpointLock()) {
                 flinkCtx.collect(value);
-                if (!autoAck) {
+                if (!autoAck && message.getQos() > 0) {
+                    if (message.getId() == 0) {
+                       message.setId((int)System.currentTimeMillis());
+                    }
                     String messageId = Integer.toString(message.getId());
                     addId(messageId);
                     unacknowledgedMessages.put(messageId, message);

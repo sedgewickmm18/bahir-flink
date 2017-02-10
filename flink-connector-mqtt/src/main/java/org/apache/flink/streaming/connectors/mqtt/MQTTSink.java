@@ -39,9 +39,9 @@ import org.slf4j.LoggerFactory;
 import java.util.HashMap;
 //import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
-//import java.net.URL;
-//import java.net.URLConnection;
-//import java.io.IOException;
+import java.net.URL;
+import java.net.URLConnection;
+import java.io.IOException;
 import javax.net.ssl.SSLContext;
 
 /**
@@ -113,6 +113,49 @@ public class MQTTSink<IN> extends RichSinkFunction<IN> implements MqttCallback {
     @Override
     public void connectionLost(Throwable t) {
         LOG.error("Connection lost!");
+
+        // reconnect in a separate thread
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                for (;;) {
+                    //
+                    if (!isInetAvailable()) {
+                        try {
+                            Thread.sleep(2);
+                        } catch (Exception ie) {
+                            // ignore interrupt exception
+                        }
+                        continue;
+                    }
+
+                    // reconnect
+                    if (!mqttClient.isConnected()) {
+                        try {
+                            mqttClient.connect(connOpts).waitForCompletion(1000 * 60);
+                        } catch (MqttSecurityException se) {
+                            se.printStackTrace();
+                            LOG.error("Could not connect to MQTT broker, wrong credentials");
+                            System.exit(1);
+                        } catch (MqttException e) {
+                            e.printStackTrace();
+                            LOG.error("Could not get to MQTT broker, retry:" + e.getMessage());
+                            try {
+                                Thread.sleep(3);
+                            } catch (Exception ie) {
+                                // ignore interrupt exception
+                            }
+                        } catch(Exception e) {
+                            LOG.error("This is definitively not good");
+                            System.exit(2);
+                        }
+                        continue;
+                    }
+                    break;
+                }
+            }
+
+        }).start();
     }
 
     @Override
@@ -128,6 +171,13 @@ public class MQTTSink<IN> extends RichSinkFunction<IN> implements MqttCallback {
             LOG.info("Pub complete" + new String(token.getMessage().getPayload()));
         }
         catch (MqttException e) {
+            LOG.error("MSG DELIVERY FAILED " + e.getMessage());
+            try {
+                close();
+            }
+            catch(Exception ee) {
+                LOG.error("CANNOT EVEN CLOSE MQTT CLIENT " + ee.getMessage());
+            }
             e.printStackTrace();
             System.exit(-1);
         }
@@ -235,6 +285,7 @@ public class MQTTSink<IN> extends RichSinkFunction<IN> implements MqttCallback {
             autoAck = true;
             QoS = 1;
         }
+        QoS = 0; // TODO remove that
     }
 
 
@@ -246,10 +297,12 @@ public class MQTTSink<IN> extends RichSinkFunction<IN> implements MqttCallback {
      */
     @Override
     public void invoke(IN value) {
+        LOG.info("Invoke");
         try {
             byte[] bytes = serializationSchema.serialize(value);
 
             MqttMessage pubmsg = new MqttMessage(bytes);
+            LOG.info("Publish msg " + pubmsg.getPayload() + " to " + topicName);
 
             // CAVEAT: this is an asynchronous call, need to understand whether I have to block or do something else here
             mqttClient.publish(topicName, bytes, QoS, false);
@@ -296,6 +349,21 @@ public class MQTTSink<IN> extends RichSinkFunction<IN> implements MqttCallback {
         if (exception != null) {
             throw exception;
         }
+    }
+
+    /*Check internet connection*/
+    public static boolean isInetAvailable() {
+        boolean connectivity;
+        try {
+            URL url = new URL("https://internetofthings.ibmcloud.com");
+            URLConnection conn = url.openConnection();
+            conn.connect();
+            connectivity = true;
+        } catch (IOException e) {
+            connectivity = false;
+            LOG.error("internet gone");
+        }
+        return connectivity;
     }
 
 }
