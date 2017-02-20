@@ -151,6 +151,10 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
                             System.exit(1);
                         } catch (MqttException e) {
                             e.printStackTrace();
+                            if (e.getReasonCode() == MqttException.REASON_CODE_CLIENT_CLOSED) {
+                                LOG.error("Client closed connection, reconnecting is not possible, check your configuration/topics");
+                                System.exit(1);
+                            }
                             LOG.error("Could not get to MQTT broker, retry:" + e.getMessage());
                             try {
                                 Thread.sleep(3);
