@@ -90,8 +90,8 @@
     <slf4j.version>1.7.16</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
 
-    <!-- Spark version -->
-    <flink.version>1.1.1</flink.version>
+    <!-- Flink version -->
+    <flink.version>1.1.4</flink.version>
 
     <PermGen>64m</PermGen>
     <MaxPermGen>512m</MaxPermGen>

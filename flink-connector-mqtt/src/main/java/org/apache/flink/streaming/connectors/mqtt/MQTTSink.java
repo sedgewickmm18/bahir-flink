@@ -344,6 +344,8 @@ public class MQTTSink<IN> extends RichSinkFunction<IN> implements MqttCallback {
             } else {
                 exception = new RuntimeException("Failed to close MQTT consumer", e);
             }
+        } finally {
+            mqttClient = null;
         }
 
         if (exception != null) {

@@ -369,6 +369,8 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
             } else {
                 exception = new RuntimeException("Failed to close MQTT consumer", e);
             }
+        } finally {
+            mqttClient = null;
         }
 
         if (exception != null) {
