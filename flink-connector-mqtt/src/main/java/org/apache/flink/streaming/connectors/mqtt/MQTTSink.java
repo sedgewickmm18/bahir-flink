@@ -248,10 +248,12 @@ public class MQTTSink<IN> extends RichSinkFunction<IN> implements MqttCallback {
             mqttClient.setCallback(this);
             mqttClient.setManualAcks(true);
 
-            SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
-            //LoggerUtility.info(CLASS_NAME, METHOD, "Provider: " + sslContext.getProvider().getName());
-            sslContext.init(null, null, null);
-            connOpts.setSocketFactory(sslContext.getSocketFactory());
+            if (brokerURL.startsWith("ssl")) {
+                SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
+                //LoggerUtility.info(CLASS_NAME, METHOD, "Provider: " + sslContext.getProvider().getName());
+                sslContext.init(null, null, null);
+                connOpts.setSocketFactory(sslContext.getSocketFactory());
+            }
 
             mqttClient.connect(connOpts).waitForCompletion(1000 * 60);
         } catch (MqttSecurityException se) {
@@ -321,6 +323,7 @@ public class MQTTSink<IN> extends RichSinkFunction<IN> implements MqttCallback {
     @Override
     public void close() throws Exception {
         super.close();
+        LOG.info("Closing MQTT Sink");
         RuntimeException exception = null;
         try {
             if (mqttClient != null) {

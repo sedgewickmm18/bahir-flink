@@ -29,7 +29,8 @@ import org.apache.flink.streaming.api.functions.source.SourceFunction;
 import org.apache.flink.streaming.api.operators.StreamingRuntimeContext;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.util.serialization.SimpleStringSchema;
-import org.apache.flink.test.util.ForkableFlinkMiniCluster;
+import org.apache.flink.runtime.minicluster.LocalFlinkMiniCluster;
+import org.apache.flink.runtime.state.FunctionSnapshotContext;
 import org.apache.flink.test.util.SuccessException;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -52,7 +53,7 @@ public class MQTTConnectorITCase {
     public static final String BROKER_URL = "queue";
     public static final String TOPIC_NAME = "hm";
     public static final String TOPIC2_NAME = "hm2";
-    private static ForkableFlinkMiniCluster flink;
+    private static LocalFlinkMiniCluster flink;
     private static int flinkPort;
 
     @BeforeClass
@@ -64,7 +65,7 @@ public class MQTTConnectorITCase {
         flinkConfig.setInteger(ConfigConstants.TASK_MANAGER_MEMORY_SIZE_KEY, 16);
         flinkConfig.setString(ConfigConstants.RESTART_STRATEGY_FIXED_DELAY_DELAY, "0 s");
 
-        flink = new ForkableFlinkMiniCluster(flinkConfig, false);
+        flink = new LocalFlinkMiniCluster(flinkConfig, false);
         flink.start();
 
         flinkPort = flink.getLeaderRPCPort();
@@ -163,9 +164,19 @@ public class MQTTConnectorITCase {
         while (deadline.hasTimeLeft() && sourceContext.getIdsNum() < MESSAGES_NUM) {
             Thread.sleep(100);
             Random random = new Random();
-            long checkpointId = random.nextLong();
+            final long checkpointId = random.nextLong();
             synchronized (sourceContext.getCheckpointLock()) {
-                source.snapshotState(checkpointId, System.currentTimeMillis());
+                source.snapshotState(new FunctionSnapshotContext() {
+                    @Override
+                    public long getCheckpointId() {
+                        return checkpointId;
+                    }
+
+                    @Override
+                    public long getCheckpointTimestamp() {
+                        return System.currentTimeMillis();
+                    }
+                });
                 source.notifyCheckpointComplete(checkpointId);
             }
         }

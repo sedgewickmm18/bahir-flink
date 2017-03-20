@@ -1,21 +1,19 @@
-# Flink Redis connector
-
+# Flink Redis Connector
 
 This connector provides a Sink that can write to [Redis](http://redis.io/) and also can publish data 
 to [Redis PubSub](http://redis.io/topics/pubsub). To use this connector, add the
 following dependency to your project:
 
-
     <dependency>
       <groupId>org.apache.bahir</groupId>
       <artifactId>flink-connector-redis_2.11</artifactId>
-      <version>1.0</version>
+      <version>1.0-SNAPSHOT</version>
     </dependency>
 
 *Version Compatibility*: This module is compatible with Redis 2.8.5.
 
 Note that the streaming connectors are not part of the binary distribution of Flink. You need to link them into your job jar for cluster execution.
-
+See how to link with them for cluster execution [here](https://ci.apache.org/projects/flink/flink-docs-release-1.2/dev/linking.html).
 
 ## Installing Redis
 
@@ -143,6 +141,9 @@ This section gives a description of all the available data types and what Redis 
         </tr>
         <tr>
             <td>SORTED_SET</td><td><a href="http://redis.io/commands/zadd">ZADD</a></td>
-        </tr>                
+        </tr>
+        <tr>
+            <td>SORTED_SET</td><td><a href="http://redis.io/commands/zrem">ZREM</a></td>
+        </tr>
       </tbody>
 </table>
