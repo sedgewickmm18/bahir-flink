@@ -107,12 +107,12 @@ public class MQTTSourceConfig<OUT> {
         }
 
         public MQTTSourceConfigBuilder<OUT> setUserName(String userName) {
-            this.userName = Preconditions.checkNotNull(userName);
+            this.userName = userName;
             return this;
         }
 
         public MQTTSourceConfigBuilder<OUT> setPassword(String password) {
-            this.password = Preconditions.checkNotNull(password);
+            this.password = password;
             return this;
         }
 

@@ -106,12 +106,12 @@ public class MQTTSinkConfig<IN> {
         }
 
         public MQTTSinkConfigBuilder<IN> setUserName(String userName) {
-            this.userName = Preconditions.checkNotNull(userName);
+            this.userName = userName;
             return this;
         }
 
         public MQTTSinkConfigBuilder<IN> setPassword(String password) {
-            this.password = Preconditions.checkNotNull(password);
+            this.password = password;
             return this;
         }
 
