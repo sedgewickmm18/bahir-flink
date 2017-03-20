@@ -282,8 +282,10 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
         this.blockingQueue = new ArrayBlockingQueue<MqttMessage>(10);
 
         // set user credentials
-        connOpts.setUserName(this.userName);
-        connOpts.setPassword(this.password.toCharArray());
+        if (this.userName != null) {
+            connOpts.setUserName(this.userName);
+            connOpts.setPassword(this.password.toCharArray());
+        }
 
         connOpts.setCleanSession(true); // no durable subscriptions, resubscribe instead
 
