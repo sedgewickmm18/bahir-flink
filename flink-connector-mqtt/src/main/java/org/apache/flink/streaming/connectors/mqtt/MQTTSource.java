@@ -19,12 +19,11 @@ package org.apache.flink.streaming.connectors.mqtt;
 
 import org.eclipse.paho.client.mqttv3.*;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
-
+import org.apache.flink.streaming.api.functions.source.MessageAcknowledgingSourceBase;
 import org.apache.flink.api.common.functions.RuntimeContext;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.streaming.api.functions.source.MessageAcknowledgingSourceBase;
 import org.apache.flink.streaming.api.operators.StreamingRuntimeContext;
 //import org.apache.flink.streaming.connectors.mqtt.internal.MQTTExceptionListener;
 //import org.apache.flink.streaming.connectors.mqtt.internal.MQTTUtil;
@@ -226,7 +225,6 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
         LOG.info("| Message: Id : " + message.getId() + " Payload: " + new String(message.getPayload()));
         //System.out.println("-------------------------------------------------");
 
-
         blockingQueue.add(message);
     }
 
@@ -249,10 +247,6 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
         //System.out.println("Topic: " + this.topicName);
         //System.out.println("ClientID: " + this.clientId);
         SimpleStringSchema unusedObject;
-
-        LOG.debug("debug");
-        LOG.info("info");
-        LOG.error("error");
     }
 
     /**
@@ -279,7 +273,7 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
         LOG.info("Opening MQTT Source");
 
         this.connOpts = new MqttConnectOptions();
-        this.blockingQueue = new ArrayBlockingQueue<MqttMessage>(10);
+        this.blockingQueue = new ArrayBlockingQueue<MqttMessage>(1000000);
 
         // set user credentials
         if (this.userName != null) {
@@ -287,10 +281,10 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
             connOpts.setPassword(this.password.toCharArray());
         }
 
-        connOpts.setCleanSession(true); // no durable subscriptions, resubscribe instead
+        connOpts.setCleanSession(false);
 
         connOpts.setKeepAliveInterval(30); // default is 60, reduced to 30 to keep firewalls happy
-        //connOpts.setMaxInflight(10); default, only for publish
+        connOpts.setMaxInflight(1000000);
         connOpts.setAutomaticReconnect(false); // we do it and resubscribe
 
 
@@ -385,6 +379,8 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
     @Override
     protected void acknowledgeIDs(long checkpointId, List<String> UIds) {
         try {
+            Long time = System.currentTimeMillis();
+            LOG.info(System.currentTimeMillis() + " --- " + "number of acks: " + unacknowledgedMessages.size());
             for (String messageId : UIds) {
                 MqttMessage unacknowledgedMessage = unacknowledgedMessages.get(messageId);
                 if (unacknowledgedMessage != null) {
@@ -395,6 +391,7 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
                     LOG.warn("Tried to acknowledge unknown MQTT message id: {}", messageId);
                 }
             }
+            LOG.info(System.currentTimeMillis() + " --- " + "Time to send acks:" + (System.currentTimeMillis()-time));
         } catch (MqttException e) {
             if (logFailuresOnly) {
                 LOG.error("Failed to acknowledge MQTT message");
@@ -420,6 +417,8 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
             e.printStackTrace();
         }
 
+        Long time = System.currentTimeMillis();
+        Integer count = 0;
         while (runningChecker.isRunning()) {
             MqttMessage message = blockingQueue.take();
 
@@ -435,6 +434,13 @@ public class MQTTSource<OUT> extends MessageAcknowledgingSourceBase<OUT, String>
 
             synchronized (flinkCtx.getCheckpointLock()) {
                 flinkCtx.collect(value);
+                count++;
+                if (System.currentTimeMillis() - time > 1000) {
+                    LOG.info(System.currentTimeMillis() + " - " + this.clientId + " --- " + "messages in queue: " + blockingQueue.size());
+                    LOG.info(System.currentTimeMillis() + " - " + this.clientId + " --- " + "Events / s for mqtt source: " + (1000.0 * count / (System.currentTimeMillis() - time)));
+                    time = System.currentTimeMillis();
+                    count = 0;
+                }
                 if (!autoAck && message.getQos() > 0) {
                     if (message.getId() == 0) {
                        message.setId((int)System.currentTimeMillis());
