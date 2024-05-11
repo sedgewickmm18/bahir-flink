@@ -37,7 +37,7 @@ under the License.
 
     <!-- Allow users to pass custom connector versions -->
     <properties>
-        <activemq.version>5.14.0</activemq.version>
+        <activemq.version>5.15.16</activemq.version>
     </properties>
 
     <dependencies>
@@ -57,7 +57,7 @@ under the License.
         <dependency>
            <groupId>org.eclipse.paho</groupId>
            <artifactId>org.eclipse.paho.client.mqttv3</artifactId>
-           <version>1.1.0</version>
+           <version>1.2.1</version>
         </dependency>
 
         <dependency>
