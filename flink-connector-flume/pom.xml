@@ -37,7 +37,7 @@ under the License.
 
 	<!-- Allow users to pass custom connector versions -->
 	<properties>
-		<flume-ng.version>1.5.0</flume-ng.version>
+		<flume-ng.version>1.10.0</flume-ng.version>
 	</properties>
 
 	<dependencies>
